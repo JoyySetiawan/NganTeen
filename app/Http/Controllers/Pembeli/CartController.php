@@ -117,7 +117,7 @@ class CartController extends Controller
         $cart->delete();
 
         return redirect()->back()
-            ->with('success', 'Item berhasil dihapus dari keranjang');
+            ->with('success', 'Item sudah dihapus dari keranjang');
     }
 
     /**

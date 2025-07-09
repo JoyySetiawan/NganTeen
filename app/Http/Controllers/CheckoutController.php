@@ -9,6 +9,7 @@ use App\Models\OrderItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str; // for slug
 
 class CheckoutController extends Controller
 {
@@ -118,7 +119,8 @@ class CheckoutController extends Controller
             }
             Cart::where('user_id', $user->id)->delete();
             DB::commit();
-            return redirect()->route('pembeli.orders.index')->with('success', 'Checkout berhasil! Silakan lakukan pembayaran langsung ke kantin setelah status pesanan menjadi "Siap Diambil".');
+            $sellerId = $cartItems->first()->menu->user_id;
+            return redirect()->route('pembeli.payment.show', ['store' => $sellerId])->with('success', 'Checkout berhasil! Silakan lakukan pembayaran.');
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->with('error', 'Checkout gagal!');

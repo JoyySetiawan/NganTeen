@@ -1,8 +1,6 @@
 @extends('layouts.pembeli')
 
 @section('content')
-
-@section('content')
 <div class="container py-4">
     <div class="row mb-4">
         <div class="col-12">
@@ -17,6 +15,7 @@
                             <table class="table table-hover mb-0">
                                 <thead class="table-light">
                                     <tr>
+                                        <th class="text-center"></th>
                                         <th>Menu</th>
                                         <th class="text-center">Harga</th>
                                         <th class="text-center">Jumlah</th>
@@ -26,7 +25,10 @@
                                 </thead>
                                 <tbody>
                                     @foreach($keranjang as $item)
-                                        <tr>
+                                        <tr class="checkout-item" data-price="{{ $item->menu->harga }}" data-user-id="{{ $item->menu->user_id }}">
+                                            <td class="text-center align-middle">
+                                                <input type="checkbox" name="menu_ids[]" value="{{ $item->id }}" onchange="updateCheckoutItem(this)">
+                                            </td>
                                             <td>
                                                 <div class="d-flex align-items-center">
                                                     <div class="flex-shrink-0 me-3">
@@ -66,8 +68,8 @@
                                                 <form action="{{ route('pembeli.cart.destroy', $item->id) }}" method="POST" class="d-inline">
                                                     @csrf
                                                     @method('DELETE')
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Yakin ingin menghapus item ini?')">
-                                                        <i class="bi bi-trash"></i>
+                                                    <button type="submit" class="btn btn-link text-danger p-0" onclick="return confirm('Yakin ingin menghapus item ini?')" data-bs-toggle="tooltip" data-bs-placement="top" title="Hapus">
+                                                        <i class="bi bi-trash-fill fs-5"></i>
                                                     </button>
                                                 </form>
                                             </td>
@@ -83,14 +85,18 @@
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-4">
                             <h5 class="mb-0">Ringkasan Belanja</h5>
-                            <div class="h4 mb-0 fw-bold text-primary">
+                            <div id="total-price" class="h4 mb-0 fw-bold text-primary">
                                 Rp {{ number_format($total, 0, ',', '.') }}
+
                             </div>
                         </div>
                         
-                        <form action="{{ route('pembeli.checkout.process') }}" method="POST">
+
+
+
+                        <form id="checkout-form" action="{{ url('/pembeli/payment') }}" method="GET" data-base-action="{{ url('/pembeli/payment') }}">
                             @csrf
-                            <button type="submit" class="btn btn-primary btn-lg w-100">
+                            <button id="checkout-button" type="submit" class="btn btn-primary btn-lg w-100">
                                 <i class="bi bi-credit-card me-2"></i>Lanjut ke Pembayaran
                             </button>
                         </form>
@@ -122,6 +128,14 @@
 
 @push('scripts')
 <script>
+// Helper: format number as 1.234 with Indonesian locale
+function formatNumber(value) {
+    return value.toLocaleString('id-ID');
+}
+// Helper: prefix number with 'Rp '
+function formatRupiah(value) {
+    return 'Rp ' + formatNumber(value);
+}
 // Simple quantity update handler
 function updateQuantity(input, menuId) {
     const value = parseInt(input.value);
@@ -143,9 +157,12 @@ function updateOrderSummary() {
     let totalPrice = 0;
     let hasSelectedItems = false;
     
+        const allCheckboxes = document.querySelectorAll('input[type="checkbox"][name^="menu_ids"]');
+    const useSelection = allCheckboxes.length > 0;
+
     document.querySelectorAll('.checkout-item').forEach(item => {
-        const checkbox = item.querySelector('input[type="checkbox"]');
-        if (checkbox.checked) {
+                const checkbox = item.querySelector('input[type="checkbox"]');
+        if (!useSelection || (checkbox && checkbox.checked)) {
             hasSelectedItems = true;
             const quantity = parseInt(item.querySelector('input[type="number"]').value);
             const price = parseFloat(item.dataset.price);
@@ -154,28 +171,34 @@ function updateOrderSummary() {
         }
     });
     
-    // Update UI
-    document.getElementById('total-items').textContent = totalItems;
-    document.getElementById('total-price').textContent = formatRupiah(totalPrice);
+    // Update total price display
+    const totalPriceEl = document.getElementById('total-price');
+    if (totalPriceEl) totalPriceEl.textContent = formatRupiah(totalPrice);
     
-    // Toggle checkout button state
+    // Toggle checkout button state based on selection
     const checkoutBtn = document.getElementById('checkout-button');
-    const noItemsMsg = document.getElementById('no-items-selected');
-    
-    if (hasSelectedItems) {
-        checkoutBtn.disabled = false;
-        noItemsMsg.classList.add('hidden');
-    } else {
-        checkoutBtn.disabled = true;
-        noItemsMsg.classList.remove('hidden');
+    if (checkoutBtn) {
+        checkoutBtn.disabled = !hasSelectedItems;
     }
+}
+
+// Wrapper function to keep backward compatibility with legacy calls
+function updateCheckoutItem(_checkbox) {
+    // Simply recompute the totals whenever a checkbox state changes
+    updateOrderSummary();
 }
 
 // Validate form before submission
 function validateCheckout() {
-    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="menu_ids"]:checked');
-    if (checkboxes.length === 0) {
-        document.getElementById('no-items-selected').classList.remove('hidden');
+    // Allow checkout if cart uses no selection checkboxes
+    const allCheckboxes = document.querySelectorAll('input[type="checkbox"][name^="menu_ids"]');
+    if (allCheckboxes.length === 0) {
+        return true;
+    }
+        const checked = document.querySelectorAll('input[type="checkbox"][name^="menu_ids"]:checked');
+    if (checked.length === 0) {
+                const msg = document.getElementById('no-items-selected');
+        if (msg) msg.classList.remove('hidden');
         return false;
     }
     return true;
@@ -184,6 +207,11 @@ function validateCheckout() {
 // Initialize the checkout page
 // Handle form submission with SweetAlert2
 function handleCheckout(e) {
+    const form = e.target;
+    // If SweetAlert (Swal) not available, submit immediately
+    if (typeof Swal === 'undefined') {
+        return form.submit();
+    }
     e.preventDefault();
     
     if (!validateCheckout()) return false;
@@ -200,21 +228,22 @@ function handleCheckout(e) {
     const selectedItems = [];
     let totalQuantity = 0;
     let totalPrice = 0;
-    
-    document.querySelectorAll('.checkout-item input[type="checkbox"]:checked').forEach(checkbox => {
-        const item = checkbox.closest('.checkout-item');
-        const name = item.querySelector('label span:first-child').textContent.trim();
-        const quantity = parseInt(item.querySelector('input[type="number"]').value);
-        const price = parseFloat(item.dataset.price) * quantity;
-        
-        selectedItems.push({
-            name: name,
-            quantity: quantity,
-            price: price
-        });
-        
-        totalQuantity += quantity;
-        totalPrice += price;
+
+    const allCheckboxes = document.querySelectorAll('input[type="checkbox"][name^="menu_ids"]');
+    const useSelection = allCheckboxes.length > 0;
+
+    document.querySelectorAll('.checkout-item').forEach(item => {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        if (!useSelection || (checkbox && checkbox.checked)) {
+            const nameEl = item.querySelector('label span:first-child') || item.querySelector('h6');
+            const name = nameEl ? nameEl.textContent.trim() : 'Item';
+            const quantity = parseInt(item.querySelector('input[type="number"]').value);
+            const price = parseFloat(item.dataset.price) * quantity;
+
+            selectedItems.push({ name, quantity, price });
+            totalQuantity += quantity;
+            totalPrice += price;
+        }
     });
     
     // Format the confirmation message with better styling
@@ -314,18 +343,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Add select all functionality
-    const selectAllCheckbox = document.getElementById('select-all');
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', function() {
-            const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="menu_ids"]:not(:disabled)');
-            checkboxes.forEach(checkbox => {
-                if (checkbox.checked !== this.checked) {
-                    checkbox.checked = this.checked;
-                    updateCheckoutItem(checkbox);
-                }
-            });
-        });
-    }
+
     
     // Prevent form submission on Enter key in quantity inputs
     document.querySelectorAll('input[type="number"]').forEach(input => {
@@ -337,9 +355,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Add form submit handler
-    const checkoutForm = document.querySelector('form[onsubmit="return validateCheckout()"]');
+    const checkoutForm = document.getElementById('checkout-form');
     if (checkoutForm) {
-        checkoutForm.onsubmit = handleCheckout;
+        checkoutForm.addEventListener('submit', handleCheckout);
     }
 });
 </script>

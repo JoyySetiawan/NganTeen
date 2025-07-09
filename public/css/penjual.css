@@ -1,4 +1,10 @@
 /* Seller Dashboard Custom Styles */
+/* Match navbar size with buyer layout */
+.navbar {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 0.75rem 0;
+}
+
 :root {
     --primary: #4e73df;
     --primary-dark: #2e59d9;

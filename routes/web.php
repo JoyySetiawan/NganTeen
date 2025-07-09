@@ -7,6 +7,7 @@ use App\Http\Controllers\Pembeli\CartController as PembeliCartController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\MenuRatingController;
+use App\Http\Controllers\Pembeli\PaymentController; // new
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -86,6 +87,9 @@ Route::middleware(['auth', 'verified', 'role:pembeli'])->prefix('pembeli')->grou
     
     // Checkout process
     Route::post('/checkout', [CheckoutController::class, 'process'])->name('pembeli.checkout.process');
+
+    // Payment page
+    Route::get('/payment/{store?}', [PaymentController::class, 'show'])->name('pembeli.payment.show');
 });
 
 // Checkout and payment routes
